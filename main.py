@@ -3,7 +3,7 @@ from functions import *
 
 
 st.set_page_config(page_title="Text mining")
-st.title("CX Text mining")
+st.title("Analyse CX - Digital")
 
 st.markdown("""
 - HPS: help& problem solving
