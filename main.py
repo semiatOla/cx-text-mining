@@ -33,7 +33,8 @@ if file:
     tab1, tab2, tab3 = st.tabs(["Analyse Sentiment", "Nuage de mots", "Analyse Croisée"])
 
     with tab1:
-        st.subheader("Appréciation du temps de résolution par raison de contact")
+        st.subheader("Appréciation du temps de résolution par la raison de contact")
+        st.caption(f"Au moins 80% des clients doivent être satisfait.")
 
         df["ResTime_neg"] = df["ResTime"] < 3
         res_time_summary = df.groupby("Contact Reason L1").agg(
@@ -49,7 +50,7 @@ if file:
         if not to_review.empty:
             st.markdown(f"Il faut revoir le temps de résolution des problèmes liés à : **{list(to_review.index)}**")
 
-        st.markdown("### Contact Reason 2")
+        st.markdown("#### Contact Reason 2")
         df["ResTime_neg"] = df["ResTime"] < 3
         res_time_summary = df.groupby("Contact Reason").agg(
             Nbr_total = ("ResTime", "count"),
@@ -65,7 +66,7 @@ if file:
             st.markdown(f"Il faut revoir le temps de résolution des problèmes liés à : **{list(to_review.index)}**")
 
 
-        st.subheader("Corrélation entre CSAT et les autres critères")
+        st.subheader("Corrélation entre CSAT et les autres critères de satisfaction")
         corr_with_csat = df[features + ["CSAT"]].corr()["CSAT"].drop("CSAT")
         corr_with_csat.sort_values(ascending=False)
         st.dataframe(corr_with_csat.to_frame("Correlation").style.format("{:.2f}"))
@@ -93,10 +94,10 @@ if file:
         negative_comments = df[df["sentiment"] == "negative"]
         st.dataframe(negative_comments[["text", "Comments"]])
         st.caption(f"Les clients se plaignent par rapport au temps d'attente, à la formation des CC et à la complexité du parcours client (réclamations & app).")
-        n = min(100, len(negative_comments))
+        
+        n = min(150, len(negative_comments))
         analyse = analyse_llm(negative_comments["Comments"].sample(n=n).tolist())
-
-        st.subheader("Analyse LLM des commentaires négatives")
+        st.subheader(f"Analyse LLM de {n} commentaires négatives")
         st.markdown(analyse)
 
         st.subheader("Commentaires positifs")

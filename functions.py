@@ -35,6 +35,7 @@ def load_data(path='data.csv'):
     df = df[df["Comments"].notna()]
     df["text"] = df["Comments"].astype(str).map(clean_comment)
     df = df[df["text"].str.strip() != ""]
+    df["Status"] = df["Status"].replace("Solved", "Résolu")
 
     # 5=ok, 0=non ok
     df["FCR_score"] = df["FCR"].map({1: 5, 3: 2})
@@ -172,7 +173,7 @@ sentiment_colors = {
 }
 
 def plot_sentiment_table(table, title=""):
-    fig, ax = plt.subplots(figsize=(10,3))
+    fig, ax = plt.subplots(figsize=(6,2))
 
     x = range(len(table.columns))
     bar_width = 0.25
@@ -244,7 +245,7 @@ def generate_insights(table_reason, table_channel, table_status, table_fcr, tabl
     st.markdown(txt)
     if "Résolu" not in table_status.columns:
         neg_non_resolu = table_status.loc["negative"]["Non résolu"]
-        txt = f"{neg_non_resolu:.1f}% des commentaires négatifs proviennent de problèmes non résolus."
+        txt = f"{neg_non_resolu:.1f}% des commentaires négatifs sont dû à la non résolution de ces cas."
         insights.append(txt)
         st.markdown(txt)
 
