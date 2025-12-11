@@ -17,12 +17,12 @@ FR_STOPWORDS = set(stopwords.words('french'))
 EN_STOPWORDS = set(stopwords.words('english'))
 CUSTOM_STOPWORDS = [
     "nan", "ras", "r.a.s", "RAS", "Ras", "ok", "okay", "Ok", "Okay",
-    "cool", "Cool", "daccord", "d", "accord", "merci", "parfait",
-    "cest", "c'est", "ca", "ça", "bon", "bien", "ai", "a", "va", "deja", 
+    "cool", "Cool", "daccord", "d", "accord", "merci",
+    "cest", "c'est", "ca", "ça","ai", "a", "va", "deja", 
     "déjà", "cette", "être", "suis", "svp", "avoir", "alors", "vers", "puis",
     "faire", "quand", "sans", "peut", "aussi", "non", "après", "car", "faut",
     "lors", "si", "sorte", "aller", "neant", "fait",
-    "veux", "veut", "leur", "leurs", "ya", "plus"
+    "veux", "veut", "leur", "leurs", "ya"
 ]
 STOPWORDS = list(FR_STOPWORDS | EN_STOPWORDS | set(CUSTOM_STOPWORDS))
 
@@ -109,11 +109,11 @@ def sentiment_score_llm(commentaire, model_id="llama-3.1-8b-instant"):
             max_tokens=800,
         )
         content = response.choices[0].message.content.strip().lower()
-        if "posit" in content:
+        if "positive" in content:
             return "positive"
-        elif "negat" in content:
+        elif "negative" in content:
             return "negative"
-        elif "neutr" in content:
+        elif "neutre" in content:
             return "neutre"
         return "neutre"
     except Exception as e:
@@ -168,7 +168,7 @@ def top_n_words_by_group(df, n=25):
 
 sentiment_colors = {
     "negative": "red",
-    "neutral": "gray",
+    "neutre": "gray",
     "positive": "green"
 }
 

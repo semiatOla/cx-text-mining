@@ -137,6 +137,9 @@ if file:
                 fig = word_cloud(sub, title=f'Wordcloud {g}')
                 st.pyplot(fig)
 
+        st.subheader(f"Words bag")
+        st.dataframe(top_n_words_by_group(df))
+
     
     with tab3:
         table_reason = pd.crosstab(df.sentiment, df["Contact Reason"], normalize='index') * 100
