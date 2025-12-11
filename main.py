@@ -29,6 +29,7 @@ if file:
     for f in features:
         df[f] = pd.to_numeric(df[f], errors="coerce")
 
+    st.dataframe(df.describe())
 
     tab1, tab2, tab3 = st.tabs(["Analyse Sentiment", "Nuage de mots", "Analyse Croisée"])
 
