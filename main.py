@@ -1,5 +1,6 @@
 import streamlit as st
 from functions import *
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 st.set_page_config(page_title="Text mining")
@@ -51,7 +52,6 @@ if file:
         ]
         top10_incoherent = incoherent.head(10)
 
-        from sklearn.feature_extraction.text import TfidfVectorizer
 
         st.subheader("Top 50 commentaires informatifs")
         vectorizer = TfidfVectorizer(stop_words=STOPWORDS, max_features=100)
