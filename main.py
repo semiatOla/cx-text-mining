@@ -29,9 +29,89 @@ if file:
     for f in features:
         df[f] = pd.to_numeric(df[f], errors="coerce")
 
-    st.dataframe(df.describe())
+    st.dataframe(df.describe().loc[['count', 'mean', 'std', 'min', 'max']])
 
-    tab1, tab2, tab3 = st.tabs(["Analyse Sentiment", "Nuage de mots", "Analyse Croisée"])
+    tab4,tab1, tab2, tab3 = st.tabs(["Stats", "Analyse Sentiment", "Nuage de mots", "Analyse Croisée"])
+
+    with tab4:
+        negative_comments = df[
+            (df["sentiment"] == "negative") &
+            (df["Comments"].notna())
+        ]
+        negative_comments["len"] = negative_comments["Comments"].str.len()
+        top10_negative = (
+            negative_comments
+            .sort_values("len", ascending=False)
+            .head(10)
+        )
+        top10_negative["Comments"].tolist()
+        incoherent = df[
+            ((df["CSAT"] >= 4) & (df["sentiment"] == "negative")) |
+            ((df["CSAT"] <= 2) & (df["sentiment"] == "positive"))
+        ]
+        top10_incoherent = incoherent.head(10)
+
+        from sklearn.feature_extraction.text import TfidfVectorizer
+
+        st.subheader("Top 50 commentaires informatifs")
+        vectorizer = TfidfVectorizer(stop_words=STOPWORDS, max_features=100)
+        X = vectorizer.fit_transform(df["Comments"].dropna())
+
+        df["importance"] = X.sum(axis=1).A1
+
+        top10_tfidf = df.sort_values("importance", ascending=False).head(50)
+        st.dataframe(top10_tfidf[["Comments", "CSAT", "importance"]])
+        if st.button("Analyser les commentaires"):
+            n = min(150, len(top10_tfidf))
+            analyse = analyse_llm(top10_tfidf["Comments"].sample(n=n).tolist())
+            st.markdown(f"#### Analyse LLM")
+            st.markdown(analyse)
+
+        st.subheader("Prédiction - sentiments")
+        df["sentiment2"] = df["Comments"].apply(lambda x: map_sentiment(sentiment_analyzer(x)[0]['label']))
+        st.dataframe(df[["Comments", "CSAT", "sentiment2", "OverallSup", "Res_CSAT", "importance"]])
+
+
+
+        mois_fr = {
+            1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
+            5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août",
+            9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"
+        }
+
+        st.subheader("Moyennes mensuelles des indicateurs")
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df["year_month"] = df["Date"].dt.to_period("M")
+        df["mois"] = df["Date"].dt.month.map(mois_fr)
+        df = df.sort_values("mois")
+
+        df_monthly_mean = (
+            df.groupby("year_month")
+            .mean(numeric_only=True)
+            .reset_index()
+        )
+        df_monthly_mean["mois"] = df_monthly_mean["year_month"].dt.month.map(mois_fr)
+        df_monthly_mean = df_monthly_mean.sort_values("year_month")
+        # df_monthly_mean.index = df_monthly_mean.index.to_timestamp()
+        st.dataframe(df_monthly_mean[["mois", "CSAT", "WaitTime", "ResTime"]].round(2))
+
+        st.subheader("Appréciation du temps de résolution par la raison de contact")
+        df["ResTime_neg"] = df["ResTime"] < 3
+        res_time_summary = df.groupby(["Contact Reason L1", "year_month"]).agg(
+            Nbr_total = ("ResTime", "count"),
+            Nbr_neg = ("ResTime_neg", "sum"),
+            Score_moyen_ResTime = ("ResTime", "mean")
+        ).reset_index()
+        res_time_summary["%_negatif"] = (res_time_summary["Nbr_neg"] / res_time_summary["Nbr_total"]) * 100
+        res_time_summary["%_positive"] = 100 - res_time_summary["%_negatif"]
+        res_time_summary = res_time_summary[res_time_summary["Score_moyen_ResTime"] > 0]
+
+        res_time_summary["mois"] = res_time_summary["year_month"].dt.month.map(mois_fr)
+        res_time_summary = res_time_summary.sort_values("year_month")
+        st.dataframe(res_time_summary[["mois", "Contact Reason L1", "Score_moyen_ResTime", "Nbr_total", "Nbr_neg"]])
+
+
+
 
     with tab1:
         st.subheader("Appréciation du temps de résolution par la raison de contact")
@@ -75,11 +155,6 @@ if file:
         st.caption(f"La satisfaction client est fortement liée à *la capacité du CC à résoudre son problème et temps de résolution*.")
         st.markdown(f"La satisfaction client est fortement liée à : **{list(to_review.index)}**.")
 
-        # st.subheader("Heatmap des corrélations")
-        # plt.figure(figsize=(6, 4))
-        # sns.heatmap(df[features + ["CSAT"]].corr(), annot=True, fmt=".2f", cmap="coolwarm")
-        # st.pyplot(plt)
-
         satisfied_wait_pct = (df["WaitTime"] >= 3).mean() * 100
         txt = f"Satisfaction globale par rapport au temps d'attente "
         if satisfied_wait_pct < 50 :
@@ -96,34 +171,15 @@ if file:
         st.dataframe(negative_comments[["text", "Comments"]])
         st.caption(f"Les clients se plaignent par rapport au temps d'attente, à la formation des CC et à la complexité du parcours client (réclamations & app).")
         
-        n = min(150, len(negative_comments))
-        analyse = analyse_llm(negative_comments["Comments"].sample(n=n).tolist())
-        st.subheader(f"Analyse LLM de {n} commentaires négatives")
-        st.markdown(analyse)
+        if st.button("Analyser les commentaires"):
+            n = min(150, len(negative_comments))
+            analyse = analyse_llm(negative_comments["Comments"].sample(n=n).tolist())
+            st.markdown(f"#### Analyse LLM de {n} commentaires négatives")
+            st.markdown(analyse)
 
         st.subheader("Commentaires positifs")
         positive_comments = df[df["sentiment"] == "positive"]
         st.dataframe(positive_comments[["text", "Comments"]])
-
-
-        # st.subheader("Prédiction???")
-        # df2 = load_data(path='data2.csv')
-        # # df['sentiment_blob'] = df['text'].map(sentiment_score)
-        # # df["sentiment_llm"] = df["Comments"].apply(sentiment_score_llm)
-        # fig, ax = plt.subplots(figsize=(6,4))
-        # sns.countplot(x=df2['sentiment_llm'], ax=ax, legend =['negative','neutre','positive'])
-        # st.pyplot(fig)
-        # st.write(df2[['Comments', 'sentiment_llm']])
-
-        # y_true = df2["sentiment"].astype(str).str.lower()
-        # y_pred = df2["sentiment_llm"].astype(str).str.lower()
-
-        # cm = confusion_matrix(y_true, y_pred, labels=["positive", "neutre", "negative"])
-        # cm_df = pd.DataFrame(cm, index=["positive", "neutre", "negative"], columns=["positive", "neutre", "negative"])
-        # st.subheader("Matrice de confusion")
-        # st.dataframe(cm_df)
-
-        #df.to_csv("data2.csv", sep=';', index=False, encoding='utf-8')
 
 
     with tab2:
@@ -157,33 +213,3 @@ if file:
         df_features = df.groupby("sentiment")[features].mean()
         st.subheader("Moyenne des critères par sentiment")
         st.dataframe(df_features.style.format("{:.2f}"))
-
-        # st.subheader("Heatmap Sentiment × critères")
-        # plt.figure(figsize=(10, 4))
-        # sns.heatmap(df_features, annot=True, fmt=".2f", cmap="coolwarm")
-        # st.pyplot(plt)
-        # st.caption(f"Les clients sont globalement satisfait sauf par rapport au temps d'attente.")
-
-        # st.subheader("Heatmap Sentiment × Raison du contact")
-        # plt.figure(figsize=(10, 4))
-        # sns.heatmap(table_reason, annot=True, fmt=".2f", cmap="coolwarm")
-        # st.pyplot(plt)
-        # st.caption(f"Les clients sont globalement satisfait sauf par rapport au temps d'attente.")
-
-        # st.subheader("Heatmap Sentiment × Canal")
-        # plt.figure(figsize=(10, 4))
-        # sns.heatmap(table_channel, annot=True, fmt=".2f", cmap="coolwarm")
-        # st.pyplot(plt)
-
-
-
-    
-
-# Confusion matrix
-
-
-#st.markdown(top_n_words_by_group(df))
-#WNlemmatizer = WordNetLemmatizer()
-#lem = WNlemmatizer.lemmatize("essayez de mettre les agents aux bout des files au même niveau d'information.", pos="a") 
-#st.markdown(lem)
-

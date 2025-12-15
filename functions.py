@@ -17,10 +17,10 @@ FR_STOPWORDS = set(stopwords.words('french'))
 EN_STOPWORDS = set(stopwords.words('english'))
 CUSTOM_STOPWORDS = [
     "nan", "ras", "r.a.s", "RAS", "Ras", "ok", "okay", "Ok", "Okay",
-    "cool", "Cool", "daccord", "d", "accord", "merci",
+    "cool", "Cool", "daccord", "d", "accord", "merci", "aimerais",
     "cest", "c'est", "ca", "ça","ai", "a", "va", "deja", 
     "déjà", "cette", "être", "suis", "svp", "avoir", "alors", "vers", "puis",
-    "faire", "quand", "sans", "peut", "aussi", "non", "après", "car", "faut",
+    "faire", "quand", "peut", "non", "après", "car", "faut",
     "lors", "si", "sorte", "aller", "neant", "fait",
     "veux", "veut", "leur", "leurs", "ya"
 ]
@@ -37,7 +37,7 @@ def load_data(path='data.csv'):
     df = df[df["text"].str.strip() != ""]
     df["Status"] = df["Status"].replace("Solved", "Résolu")
 
-    # 5=ok, 0=non ok
+    # 5=ok, 2=non ok
     df["FCR_score"] = df["FCR"].map({1: 5, 3: 2})
     return df
 
@@ -59,67 +59,8 @@ def word_cloud(df, max_words=150, title=None):
     if title: ax.set_title(title)
     return fig
 
-def sentiment_score2(text):
-    pos = ["super","bien","rapide","efficace","professionnel","satisfait","résolu","sympa"]
-    neg = ["attente","long","lent","pas","jamais","impossible","déçu","incompétent","problème","colère"]
-    s = 0
-    for p in pos: s += text.count(p)
-    for n in neg: s -= text.count(n)
-    return np.sign(s)
-
-def sentiment_score(text):
-    blob = TextBlob(str(text))
-    polar = blob.sentiment.polarity
-    if polar > 0:
-        return 'positive'
-    elif polar < 0:
-        return 'negative'
-    else:
-        return 'neutre'
-    
-
-SYSTEM_PROMPT = """
-Tu es un modèle spécialisé en analyse du sentiment pour des commentaires de clients évaluant le service client dans le secteur des télécommunications.
-Ton objectif est d'évaluer uniquement le sentiment exprimé dans le commentaire fourni, en te basant sur le ton, l'émotion, la satisfaction ou l'insatisfaction du client.
-
-Tu dois impérativement répondre par une seule des trois étiquettes suivantes :
-- positive
-- negative
-- neutre
-
-Exemple:
-commentaire: "essayez de mettre les agents aux bout des files au même niveau d'information."
-réponse: negative
-
-Voici le commentaire à analyser :
-<<< COMMENTAIRE >>>
-
-Réponse :
-"""
-
 #"openai/gpt-oss-120b"
-def sentiment_score_llm(commentaire, model_id="llama-3.1-8b-instant"):
-    try:
-        response = client.chat.completions.create(
-            model=model_id,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT.replace("<<< COMMENTAIRE >>>", commentaire)},
-            ],
-            temperature=0.3,
-            max_tokens=800,
-        )
-        content = response.choices[0].message.content.strip().lower()
-        if "positive" in content:
-            return "positive"
-        elif "negative" in content:
-            return "negative"
-        elif "neutre" in content:
-            return "neutre"
-        return "neutre"
-    except Exception as e:
-        #yield f"\n\n(Erreur: {e})"
-        return "Erreur"
-    
+   
 SENTI_PROMPT = """
 Tu es un assistant spécialisé en analyse des commentaires négatifs des clients d'un service de télécommunications.
 
@@ -131,7 +72,7 @@ Tâches :
 1. Identifier et lister les **préoccupations principales** des clients (ex : délai trop long, agent peu disponible, problème réseau, facturation, etc.)
 2. Fournir des **recommandations concrètes** pour améliorer le service (ex : formation agents, réduction du temps d'attente, amélioration réseau, etc.)
 3. Répondre de manière claire et structurée en **deux sections distinctes** :
-   - Préoccupations des clients : liste claire
+   - Préoccupations des clients : liste claire avec le nombre de fois retrouvé
    - Recommandations : liste simple et brève
 
 Réponse uniquement sous ce format.
@@ -143,7 +84,8 @@ def analyse_llm(commentaires, model_id="llama-3.1-8b-instant"):
         response = client.chat.completions.create(
             model=model_id,
             messages=[
-                {"role": "system", "content": SENTI_PROMPT.replace("<<< COMMENTAIRES >>>", commentaires)},
+                {"role": "system", "content": SENTI_PROMPT},
+                {"role": "user", "content": commentaires},
             ],
             temperature=0.4,
             max_tokens=800,
@@ -172,7 +114,7 @@ sentiment_colors = {
     "positive": "green"
 }
 
-def plot_sentiment_table(table, title=""):
+def plot_sentiment_table(table, title="", legend=None):
     fig, ax = plt.subplots(figsize=(6,2))
 
     x = range(len(table.columns))
@@ -186,11 +128,12 @@ def plot_sentiment_table(table, title=""):
             label=sentiment.capitalize(),
             color=sentiment_colors.get(sentiment, "black")
         )
-
+    if legend is None:
+        legend = table.columns
     ax.set_title(title)
     ax.set_ylabel("Pourcentage (%)")
     ax.set_xticks([p + bar_width for p in x])
-    ax.set_xticklabels(table.columns, rotation=45)
+    ax.set_xticklabels(legend, rotation=45)
     ax.legend()
     ax.grid(True, linestyle="--", alpha=0.4)
 
@@ -236,24 +179,25 @@ def generate_insights(table_reason, table_channel, table_status, table_fcr, tabl
         st.markdown(txt)
 
     # Status résolution
-    st.write()
-    fig = plot_sentiment_table(table_status, "Satisfaction par statut de la requête")
-    st.pyplot(fig)
-    worst_status = table_status.loc["negative"].idxmax()
-    txt = f"La majorité des clients insatisfaits ont leur cas : **{worst_status}**."
-    insights.append(txt)
-    st.markdown(txt)
-    if "Résolu" not in table_status.columns:
-        neg_non_resolu = table_status.loc["negative"]["Non résolu"]
-        txt = f"{neg_non_resolu:.1f}% des commentaires négatifs sont dû à la non résolution de ces cas."
+    if(len(table_status.columns) > 1):
+        st.write()
+        fig = plot_sentiment_table(table_status, "Satisfaction par statut de la requête")
+        st.pyplot(fig)
+        worst_status = table_status.loc["negative"].idxmax()
+        txt = f"La majorité des clients insatisfaits ont leur cas : **{worst_status}**."
         insights.append(txt)
         st.markdown(txt)
+        if "Résolu" not in table_status.columns:
+            neg_non_resolu = table_status.loc["negative"]["Non résolu"]
+            txt = f"{neg_non_resolu:.1f}% des commentaires négatifs sont dû à la non résolution de ces cas."
+            insights.append(txt)
+            st.markdown(txt)
 
 
     # FCR
     st.write()
     if 3 in table_fcr.columns:
-        fig = plot_sentiment_table(table_fcr, "Satisfaction par FCR")
+        fig = plot_sentiment_table(table_fcr, "Satisfaction par FCR", ["Oui", "Non"])
         st.pyplot(fig)
         low_fcr = table_fcr.loc["negative"][3]
         if low_fcr > 70:
@@ -270,14 +214,14 @@ def generate_insights(table_reason, table_channel, table_status, table_fcr, tabl
     low_effort = table_effort.loc["negative"].idxmin()
     high_effort = table_effort.loc["positive"].idxmax()
     if low_effort == high_effort:
-        txt = f"**{high_effort}** a le meilleur score d'effort"
+        txt = f"**{high_effort}** a le meilleur score de temps"
         insights.append(txt)
         st.markdown(txt)
     else:
-        txt = f"Le meilleur score effort est sur : **{high_effort}**."
+        txt = f"Le meilleur score de temps est : **{high_effort}**."
         insights.append(txt)
         st.markdown(txt)
-        txt = f"Le plus faible score effort est : **{low_effort}**."
+        txt = f"Le plus faible score de temps est : **{low_effort}**."
         insights.append(txt)
         st.markdown(txt)
 
@@ -288,15 +232,15 @@ def generate_insights(table_reason, table_channel, table_status, table_fcr, tabl
     best_score = table_scores.loc["positive"].idxmax()
     worst_score = table_scores.loc["negative"].idxmin()
     if worst_score == best_score:
-        txt = f"**{best_score}** est la dimension la mieux perçue."
+        txt = f"**{best_score}** est l'aspect le plus perçu."
         insights.append(txt)
         st.markdown(txt)
     else:
-        txt = f"La dimension la mieux perçue est : **{best_score}**."
+        txt = f"L'aspect le mieux perçu est : **{best_score}**."
         insights.append(txt)
         st.markdown(txt)
 
-        txt = f"La dimension la plus faible est : **{worst_score}**."
+        txt = f"L'aspect le mal perçu est : **{worst_score}**."
         insights.append(txt)
         st.markdown(txt)
     
@@ -304,3 +248,19 @@ def generate_insights(table_reason, table_channel, table_status, table_fcr, tabl
     return insights
 
 
+
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForSequenceClassification.from_pretrained(model_name)
+
+sentiment_analyzer = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, truncation=True)
+
+def map_sentiment(label):
+    stars = int(label.split()[0]) 
+    if stars <= 2:
+        return "negative"
+    elif stars == 3:
+        return "neutre"
+    else:
+        return "positive"
