@@ -110,7 +110,7 @@ def top_n_words_by_group(df, n=25):
 
 sentiment_colors = {
     "negative": "red",
-    "neutre": "gray",
+    #"neutre": "gray",
     "positive": "green"
 }
 
@@ -260,7 +260,5 @@ def map_sentiment(label):
     stars = int(label.split()[0]) 
     if stars <= 2:
         return "negative"
-    elif stars == 3:
-        return "neutre"
     else:
         return "positive"
